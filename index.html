@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Lead Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f4f5f9;--pn:#fff;--tx:#1c2033;--mu:#6b7189;--bd:#e3e5ee;--pr:#4f46e5;--ok:#16a34a;--wa:#ea8a0c;--er:#dc2626}
+[data-theme=dark]{--bg:#0f1220;--pn:#181c30;--tx:#e8eaf5;--mu:#8e94b0;--bd:#2a2f4a;--pr:#818cf8}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--tx);display:flex;min-height:100vh}
+nav{width:200px;background:var(--pn);border-right:1px solid var(--bd);padding:16px 10px;position:sticky;top:0;height:100vh;flex:none}
+nav h1{font-size:16px;margin:0 8px 18px;color:var(--pr)}nav button{display:block;width:100%;text-align:left;margin:2px 0}
+main{flex:1;padding:18px;min-width:0}
+button,select,input,textarea{font:inherit;color:var(--tx);background:var(--pn);border:1px solid var(--bd);border-radius:8px;padding:7px 10px}
+button{cursor:pointer}button:hover{border-color:var(--pr)}button.p{background:var(--pr);color:#fff;border-color:var(--pr)}button.d{color:var(--er)}
+nav button{border:0;background:none}nav button.on{background:var(--pr);color:#fff}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.bar .g{flex:1}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.st{background:var(--pn);border:1px solid var(--bd);border-radius:10px;padding:10px 12px}.st b{font-size:22px;display:block}.st span{color:var(--mu);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(var(--cols,2),1fr);gap:10px}
+.card{background:var(--pn);border:1px solid var(--bd);border-radius:10px;padding:12px;display:flex;gap:10px;justify-content:space-between}
+.compact .card{padding:7px}.card h3{margin:0 0 3px;font-size:15px}.card .m{color:var(--mu);font-size:13px;word-break:break-word}
+.acts{display:flex;flex-direction:column;gap:4px;flex:none}.acts button{padding:3px 8px;font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--bg);border:1px solid var(--bd);margin:2px 3px 2px 0}
+.tag.ok{color:var(--ok)}.tag.wa{color:var(--wa)}.tag.er{color:var(--er)}
+.chip{display:inline-flex;gap:6px;background:var(--pr);color:#fff;border-radius:99px;padding:2px 10px;font-size:12px;margin:0 4px 4px 0;cursor:pointer}
+#drop{border:2px dashed var(--bd);border-radius:12px;padding:30px;text-align:center;color:var(--mu);margin-bottom:14px}#drop.h{border-color:var(--pr)}
+#ov{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;z-index:9;padding:10px}
+#ov.on{display:flex}#md{background:var(--pn);border-radius:12px;padding:18px;max-width:640px;width:100%;max-height:90vh;overflow:auto}
+#md label{display:block;margin:8px 0 2px;color:var(--mu);font-size:12px}#md input,#md select,#md textarea{width:100%}
+table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--bd);padding:5px;text-align:left;vertical-align:top;word-break:break-word}
+#toast{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:20}
+#toast div{background:var(--tx);color:var(--bg);padding:8px 14px;border-radius:8px}
+footer{text-align:center;padding:14px;border-top:1px solid var(--bd);background:var(--pn);color:var(--mu);font-size:13px}footer a{color:var(--pr);text-decoration:none}
+h2{margin:18px 0 8px;font-size:15px}.empty{text-align:center;color:var(--mu);padding:40px}
+@media(max-width:800px){body{flex-direction:column}nav{width:100%;height:auto;position:static;display:flex;overflow:auto;padding:6px}nav h1{display:none}nav button{width:auto;white-space:nowrap}.grid{grid-template-columns:1fr!important}}
+</style></head><body>
+<nav><h1>◆ Smart Lead Manager</h1>
+<button data-v=dash>▦ Dashboard</button><button data-v=fu>⏰ Follow-ups</button><button data-v=act>☰ Activity</button><button data-v=hist>🗂 Excel History</button><button data-v=set>⚙ Settings</button>
+<button data-a=theme>◐ Dark / Light</button></nav>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column"><main id="main"></main><footer>Developed by <b>Saad Takorawala</b> &nbsp;|&nbsp; Mobile: <a href="tel:+919586628313">9586628313</a></footer></div><div id="ov"><div id="md"></div></div><div id="toast"></div>
+<input type="file" id="fi" accept=".xlsx,.xls,.csv" hidden><input type="file" id="bi" accept=".json" hidden>
+<script>
+const $=s=>document.querySelector(s),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const STORES=['datasets','leads','activities','followUps','settings'];
+let db,ds=null,L=[],A=[],F=[],view='dash',q='',quick='all',flt=[],sort='name',page=1,sel=new Set(),sm=new Map(),st={theme:'light',layout:'comfortable',pageSize:24,cols:2,emailMode:'gmail',cc:'91'};
+const rq=r=>new Promise((s,j)=>{r.onsuccess=()=>s(r.result);r.onerror=()=>j(r.error)});
+const S=(n,m='readonly')=>db.transaction(n,m).objectStore(n);
+const getAll=(n,i,v)=>rq(i?S(n).index(i).getAll(v):S(n).getAll());
+const put=n=>o=>rq(S(n,'readwrite').put(o)).catch(fail);
+const bulk=(names,fn)=>new Promise((res,rej)=>{const t=db.transaction(names,'readwrite');fn(n=>t.objectStore(n));t.oncomplete=res;t.onerror=t.onabort=()=>rej(t.error||new Error('Transaction failed'))}).catch(e=>{fail(e);throw e});
+function fail(e){toast(e&&e.name==='QuotaExceededError'?'Storage is full. Export a backup and free space.':'Database error: '+(e&&e.message||e),1)}
+function toast(m,bad){const d=document.createElement('div');d.textContent=m;if(bad)d.style.background='var(--er)',d.style.color='#fff';$('#toast').append(d);setTimeout(()=>d.remove(),3800)}
+function modal(h){$('#md').innerHTML=h;$('#ov').classList.add('on')}const closeM=()=>$('#ov').classList.remove('on');
+function openDB(){return new Promise((res,rej)=>{if(!window.indexedDB)return rej(new Error('IndexedDB unavailable'));const r=indexedDB.open('SmartLeadManagerDB',1);
+r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('datasets',{keyPath:'datasetId'});const l=d.createObjectStore('leads',{keyPath:'leadId'});l.createIndex('datasetId','datasetId');l.createIndex('companyName','companyName');
+for(const n of['activities','followUps']){const s=d.createObjectStore(n,{keyPath:n=='activities'?'activityId':'followUpId'});s.createIndex('datasetId','datasetId');s.createIndex('leadId','leadId')}d.createObjectStore('settings',{keyPath:'key'})};
+r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
+function applySt(){document.documentElement.dataset.theme=st.theme;document.body.classList.toggle('compact',st.layout=='compact');document.body.style.setProperty('--cols',st.cols)}
+const setSet=(k,v)=>{st[k]=v;put('settings')({key:k,value:v});applySt()};
+/* ---------- field helpers ---------- */
+const AL={name:['company_name','business_name','title','name','company'],phone:['phone','phones','mobile','contact_number','telephone'],email:['email','emails','email_address'],web:['website','web','site','url'],addr:['address','location'],cat:['category','type'],rating:['rating'],reviews:['reviews'],ig:['instagram'],fb:['facebook'],li:['linkedin']};
+function detect(cols){const m={};for(const k in AL)for(const a of AL[k]){const c=cols.find(c=>c.trim().toLowerCase()==a);if(c){m[k]=c;break}}return m}
+const raw=(l,k)=>{const c=ds&&ds.datasetMetadata.map[k];return c?String(l.originalRowData[c]??'').trim():''};
+const phone=l=>(raw(l,'phone').match(/\+?\d[\d\s\-().]{6,}\d/)||[''])[0].trim();
+const email=l=>(raw(l,'email').match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/)||[''])[0];
+const link=(l,k)=>(raw(l,k).match(/https?:\/\/[^\s'"\]\[,]+/)||[''])[0];
+const web=l=>link(l,'web');
+const fusOf=id=>F.filter(f=>f.leadId==id&&(f.status=='Pending'||f.status=='Overdue')).sort((a,b)=>due(a)-due(b));
+const due=f=>new Date(f.dueDate+'T'+(f.dueTime||'00:00')).getTime();
+const fmt=t=>new Date(t).toLocaleString([],{dateStyle:'medium',timeStyle:'short'});
+/* ---------- datasets ---------- */
+async function openDs(id){ds=await rq(S('datasets').get(id));if(!ds)return;ds.lastOpenedAt=Date.now();put('datasets')(ds);localStorage.setItem('slm_ds',id);flt=[];q='';quick='all';page=1;sel.clear();await refresh()}
+async function refresh(){if(ds){[L,A,F]=await Promise.all([getAll('leads','datasetId',ds.datasetId),getAll('activities','datasetId',ds.datasetId),getAll('followUps','datasetId',ds.datasetId)]);
+sm=new Map(L.map(l=>[l.leadId,Object.values(l.originalRowData).join(' ').toLowerCase()]));overdue()}else L=A=F=[];render()}
+function overdue(){const n=Date.now();F.forEach(f=>{if(f.status=='Pending'&&due(f)<n){f.status='Overdue';put('followUps')(f)}else if(f.status=='Overdue'&&due(f)>=n){f.status='Pending';put('followUps')(f)}})}
+async function importFile(file){if(!file)return;toast('Importing '+file.name+'…');await new Promise(r=>setTimeout(r,30));
+try{const wb=XLSX.read(await file.arrayBuffer(),{type:'array'}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});if(!rows.length)throw new Error('File has no rows');
+const cols=Object.keys(rows[0]),map=detect(cols),id=uid(),seen=new Set(),leads=[];let dup=0;
+rows.forEach((r,i)=>{const nm=String(r[map.name]??'').trim(),k=(nm+'|'+(r[map.phone]??'')).toLowerCase();if(nm&&seen.has(k)){dup++;return}seen.add(k);
+leads.push({leadId:uid(),datasetId:id,originalExcelRow:i+2,companyName:nm||'(Unnamed)',originalRowData:r,status:'New',callStatus:'Not Called',emailStatus:'Not Emailed',notes:'',createdAt:Date.now(),updatedAt:Date.now()})});
+const d={datasetId:id,fileName:file.name,uploadedAt:Date.now(),totalLeads:leads.length,lastOpenedAt:Date.now(),datasetMetadata:{columns:cols,map,duplicatesSkipped:dup}};
+await bulk(['datasets','leads'],o=>{o('datasets').put(d);leads.forEach(l=>o('leads').put(l))});
+toast(`Imported ${leads.length} leads${dup?` (${dup} duplicates skipped)`:''}`);view='dash';await openDs(id)}catch(e){toast('Import failed: '+e.message,1)}}
+async function delDs(id){const d=await rq(S('datasets').get(id));if(!confirm(`Delete "${d.fileName}" and all its leads, activities and follow-ups?`))return;
+const keys={};for(const n of['leads','activities','followUps'])keys[n]=await rq(S(n).index('datasetId').getAllKeys(id));
+await bulk(['datasets','leads','activities','followUps'],o=>{o('datasets').delete(id);for(const n in keys)keys[n].forEach(k=>o(n).delete(k))});
+if(ds&&ds.datasetId==id){ds=null;const r=await getAll('datasets');if(r[0])await openDs(r[0].datasetId);else await refresh()}else render();toast('Dataset deleted')}
+/* ---------- activity commit ---------- */
+async function commit(l,f,type,desc){const a={activityId:uid(),datasetId:ds.datasetId,leadId:l.leadId,activityType:type,description:desc,timestamp:Date.now()};l.updatedAt=Date.now();
+await bulk(['leads','activities','followUps'],o=>{o('leads').put(l);if(f)o('followUps').put(f);o('activities').put(a)});A.push(a);if(f&&!F.includes(f))F.push(f);render()}
+const byId=id=>L.find(l=>l.leadId==id);
+/* ---------- filtering ---------- */
+const QF={all:'All Leads',phone:'With Phone',nophone:'Without Phone',email:'With Email',noemail:'Without Email',web:'With Website',addr:'With Address',called:'Called',notcalled:'Not Called',emailed:'Emailed',notemailed:'Not Emailed',fu:'Follow-up Required',Interested:'Interested','Not Interested':'Not Interested',Converted:'Converted'};
+const QP={all:()=>1,phone:l=>phone(l),nophone:l=>!phone(l),email:l=>email(l),noemail:l=>!email(l),web:l=>web(l),addr:l=>raw(l,'addr'),called:l=>l.callStatus=='Called',notcalled:l=>l.callStatus!='Called',emailed:l=>l.emailStatus!='Not Emailed',notemailed:l=>l.emailStatus=='Not Emailed',fu:l=>l.status=='Follow-up Required'};
+function cond(v,c,x){v=String(v??'').trim();const a=v.toLowerCase(),b=String(x).toLowerCase(),n=parseFloat(v),m=parseFloat(x);
+return({contains:a.includes(b),ncontains:!a.includes(b),eq:a==b,neq:a!=b,starts:a.startsWith(b),ends:a.endsWith(b),gt:n>m,lt:n<m,empty:!v,nempty:!!v})[c]}
+function filtered(){const t=q.toLowerCase().trim(),p=QP[quick]||(l=>l.status==quick);
+let r=L.filter(l=>(!t||sm.get(l.leadId).includes(t))&&p(l)&&flt.every(f=>cond(l.originalRowData[f.col],f.c,f.v)));
+const key={name:l=>l.companyName.toLowerCase(),rating:l=>-(parseFloat(raw(l,'rating'))||0),cat:l=>raw(l,'cat').toLowerCase(),act:l=>-l.updatedAt,status:l=>l.status};
+return r.sort((a,b)=>{const x=key[sort](a),y=key[sort](b);return x<y?-1:x>y?1:0})}
+/* ---------- rendering ---------- */
+const CN={contains:'contains',ncontains:'does not contain',eq:'equals',neq:'does not equal',starts:'starts with',ends:'ends with',gt:'greater than',lt:'less than',empty:'is empty',nempty:'is not empty'};
+const STS=['New','Called','Contacted','Interested','Not Interested','Follow-up Required','Converted'];
+const opt=(a,v)=>a.map(x=>`<option ${x==v?'selected':''}>${esc(x)}</option>`).join('');
+function render(){document.querySelectorAll('nav [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v==view));
+const m=$('#main');
+if(!ds&&view!='hist'&&view!='set'){m.innerHTML=`<div id="drop">Drag & drop an Excel or CSV file here<br><br><button class=p data-a=pick>Browse file</button></div><div class=empty>No dataset yet. Upload a lead file to begin.</div>`;return dropInit()}
+({dash:rDash,fu:rFu,act:rAct,hist:rHist,set:rSet})[view]()}
+async function head(){const ds2=await getAll('datasets');return `<div class=bar><b style="font-size:17px">${esc(ds?ds.fileName:'Smart Lead Manager')}</b><span class=g></span><select data-c=sw>${ds2.map(d=>`<option value="${d.datasetId}" ${ds&&d.datasetId==ds.datasetId?'selected':''}>${esc(d.fileName)}</option>`).join('')}</select><button class=p data-a=pick>＋ Import</button></div>`}
+async function rDash(){const h=await head();const cols=ds.datasetMetadata.columns,P=fusOf;
+const cnt=f=>L.filter(f).length,pend=F.filter(f=>f.status=='Pending').length,ov=F.filter(f=>f.status=='Overdue').length;
+const s=[['Total Leads',L.length],['With Phone',cnt(phone)],['With Email',cnt(email)],['Called',cnt(l=>l.callStatus=='Called')],['Emailed',cnt(l=>l.emailStatus!='Not Emailed')],['Contacted',cnt(l=>['Contacted','Interested','Converted'].includes(l.status)||l.callStatus=='Called'||l.emailStatus!='Not Emailed'||l.waStatus)],['Follow-ups Pending',pend],['Overdue',ov]];
+$('#main').innerHTML=h+`<div id="drop">Drop an Excel/CSV file here to import a new dataset</div><div class=stats>${s.map(x=>`<div class=st><b>${x[1]}</b><span>${x[0]}</span></div>`).join('')}</div>
+<div class=bar><input id=q placeholder="Search every column…" value="${esc(q)}" style="flex:1;min-width:180px"><select data-c=quick>${Object.entries(QF).map(([k,v])=>`<option value="${k}" ${k==quick?'selected':''}>${v}</option>`).join('')}</select>
+<select data-c=sort>${[['name','Sort: Company'],['rating','Sort: Rating'],['cat','Sort: Category'],['act','Sort: Newest activity'],['status','Sort: Status']].map(x=>`<option value=${x[0]} ${x[0]==sort?'selected':''}>${x[1]}</option>`).join('')}</select></div>
+<div class=bar><select id=fc>${cols.map(c=>`<option>${esc(c)}</option>`).join('')}</select><select id=fk>${Object.entries(CN).map(([k,v])=>`<option value=${k}>${v}</option>`).join('')}</select><input id=fv placeholder="Value"><button data-a=addf>Apply filter</button><button data-a=reset>Reset all</button></div>
+<div id=chips></div><div class=bar id=bulk></div><div id=list></div>`;dropInit();renderList()}
+function renderList(){const r=filtered(),ps=st.pageSize,pages=Math.max(1,Math.ceil(r.length/ps));if(page>pages)page=pages;const rows=r.slice((page-1)*ps,page*ps);
+$('#chips').innerHTML=flt.map((f,i)=>`<span class=chip data-a=rmf data-i=${i}>${esc(f.col)} ${CN[f.c]} ${esc(f.v)} ✕</span>`).join('');
+$('#bulk').innerHTML=`<span>${r.length} leads · ${sel.size} selected</span><button data-a=selall>Select all filtered</button><button data-a=selnone>Clear</button><select data-c=bulkst><option value="">Bulk status…</option>${STS.map(s=>`<option>${s}</option>`).join('')}</select><button data-a=expf>Export filtered</button><button data-a=exps>Export selected</button>`;
+$('#list').innerHTML=rows.length?`<div class=grid>${rows.map(card).join('')}</div><div class=bar style="justify-content:center;margin-top:12px"><button data-a=prev ${page<2?'disabled':''}>‹ Prev</button><span>Page ${page} / ${pages}</span><button data-a=next ${page>=pages?'disabled':''}>Next ›</button></div>`:`<div class=empty>No leads match your search and filters.</div>`;
+overdueTop=r}
+let overdueTop=[];
+function card(l){const id=l.leadId,p=phone(l),e=email(l),w=web(l),ad=raw(l,'addr'),f=fusOf(id)[0],tg=(t,c='')=>`<span class="tag ${c}">${esc(t)}</span>`;
+const soc=[['ig','Instagram'],['fb','Facebook'],['li','LinkedIn']].filter(x=>link(l,x[0])).map(x=>`<button data-a=soc data-k=${x[0]} data-id=${id}>${x[1]}</button>`).join('');
+return `<div class=card><div style="min-width:0"><label><input type=checkbox data-a=sel data-id=${id} ${sel.has(id)?'checked':''}></label> <h3 style="display:inline">${esc(l.companyName)}</h3><div class=m>${esc(raw(l,'cat'))}</div>
+<div class=m>📞 ${esc(p||'—')} ${p?`<a href=# data-a=cp data-v="${esc(p)}">copy</a>`:''}<br>✉ ${esc(e||'—')} ${e?`<a href=# data-a=cp data-v="${esc(e)}">copy</a>`:''}<br>🌐 ${esc(w||'—')}<br>📍 ${esc(ad||'—')}<br>★ ${esc(raw(l,'rating')||'—')} (${esc(raw(l,'reviews')||0)} reviews)</div>
+${tg(l.status,l.status=='Converted'?'ok':l.status=='Follow-up Required'?'wa':'')}${tg(l.callStatus,l.callStatus=='Called'?'ok':'')}${tg(l.emailStatus,l.emailStatus!='Not Emailed'?'ok':'')}${l.waStatus?tg(l.waStatus,'ok'):''}${f?tg('Follow-up '+fmt(due(f)),f.status=='Overdue'?'er':'wa'):''}
+<div><select data-c=lst data-id=${id}>${opt(STS,l.status)}</select></div></div>
+<div class=acts>${p?`<button class=p data-a=call data-id=${id}>Call</button><button data-a=wa data-id=${id}>WhatsApp</button>`:''}${e?`<button data-a=mail data-id=${id}>Email</button>`:''}${ad?`<button data-a=map data-id=${id}>Location</button>`:''}${w?`<button data-a=web data-id=${id}>Website</button>`:''}${soc}<button data-a=fu data-id=${id}>Follow-up</button><button data-a=det data-id=${id}>Details</button></div></div>`}
+function fuCard(f){const l=byId(f.leadId)||{companyName:'(deleted)',originalRowData:{}},p=l.leadId?phone(l):'',pr={Urgent:'er',High:'wa'}[f.priority]||'';
+const live=f.status=='Pending'||f.status=='Overdue';
+return `<div class=card><div><h3>${esc(l.companyName)}</h3><div class=m>📞 ${esc(p||'—')}<br>${fmt(due(f))}<br>${esc(f.description)}</div><span class="tag ${pr}">${f.priority}</span><span class="tag ${f.status=='Overdue'?'er':f.status=='Completed'?'ok':''}">${f.status}</span></div>
+<div class=acts>${live?`${p?`<button class=p data-a=call data-id=${f.leadId}>Call Now</button>`:''}<button data-a=done data-fid=${f.followUpId}>Mark Completed</button><button data-a=resch data-fid=${f.followUpId}>Reschedule</button><button data-a=editf data-fid=${f.followUpId}>Edit</button><button class=d data-a=cancelf data-fid=${f.followUpId}>Cancel</button>`:''}</div></div>`}
+function rFu(){overdue();const t=new Date().toDateString(),sec=(n,a)=>`<h2>${n} (${a.length})</h2>${a.length?`<div class=grid>${a.map(fuCard).join('')}</div>`:'<div class=m>Nothing here.</div>'}`,
+live=F.filter(f=>f.status=='Pending'),by=(a)=>a.sort((x,y)=>due(x)-due(y));
+$('#main').innerHTML=`<div class=bar><b style="font-size:17px">Follow-ups</b><span class=g></span><button data-a=expfu>Export follow-ups</button></div>`+
+sec("Today's Follow-ups",by(live.filter(f=>new Date(due(f)).toDateString()==t)))+sec('Upcoming Follow-ups',by(live.filter(f=>new Date(due(f))>new Date()&&new Date(due(f)).toDateString()!=t)))+
+sec('Overdue Follow-ups',by(F.filter(f=>f.status=='Overdue')))+sec('Completed Follow-ups',by(F.filter(f=>f.status=='Completed')))}
+function rAct(){const r=[...A].sort((a,b)=>b.timestamp-a.timestamp).slice(0,400);
+$('#main').innerHTML=`<div class=bar><b style="font-size:17px">Activity history</b><span class=g></span><button data-a=expa>Export activity</button></div>`+(r.length?`<table>${r.map(a=>`<tr><td>${fmt(a.timestamp)}</td><td>${esc((byId(a.leadId)||{}).companyName||'')}</td><td>${esc(a.activityType)}</td><td>${esc(a.description)}</td></tr>`).join('')}</table>`:'<div class=empty>No activity yet.</div>')}
+let hq='';
+async function rHist(){const all=await getAll('datasets'),acts=await getAll('leads'),fus=await getAll('followUps');
+const cards=all.filter(d=>d.fileName.toLowerCase().includes(hq.toLowerCase())).sort((a,b)=>b.lastOpenedAt-a.lastOpenedAt).map(d=>{const ls=acts.filter(l=>l.datasetId==d.datasetId);
+return `<div class=card><div><h3>${esc(d.fileName)} <button class=d data-a=delds data-id=${d.datasetId} title="Delete">🗑</button></h3><div class=m>Imported ${fmt(d.uploadedAt)}<br>Last opened ${fmt(d.lastOpenedAt)}<br>${ls.length} leads · ${ls.filter(l=>l.callStatus=='Called').length} called · ${ls.filter(l=>l.emailStatus!='Not Emailed').length} emailed · ${fus.filter(f=>f.datasetId==d.datasetId&&(f.status=='Pending'||f.status=='Overdue')).length} pending follow-ups</div></div><div class=acts><button class=p data-a=opends data-id=${d.datasetId}>Open Dashboard</button></div></div>`}).join('');
+$('#main').innerHTML=`<div class=bar><b style="font-size:17px">Excel History</b><span class=g></span><input id=hq placeholder="Search filename" value="${esc(hq)}"><button class=p data-a=pick>＋ Import</button></div>`+(cards?`<div class=grid>${cards}</div>`:'<div class=empty>No imported files.</div>')}
+async function rSet(){const d=await getAll('datasets'),n=(await getAll('leads')).length;let est='';try{const e=await navigator.storage.estimate();est=`${(e.usage/1048576).toFixed(1)} MB used`}catch{}
+$('#main').innerHTML=`<b style="font-size:17px">Settings</b><h2>Appearance</h2><div class=bar><select data-c=theme>${opt(['light','dark'],st.theme)}</select></div>
+<h2>Display</h2><div class=bar><select data-c=layout>${opt(['comfortable','compact'],st.layout)}</select><select data-c=colsn>${[1,2,3].map(n=>`<option value=${n} ${n==st.cols?'selected':''}>${n} per row</option>`).join('')}</select><select data-c=psz>${[12,24,48,96].map(n=>`<option value=${n} ${n==st.pageSize?'selected':''}>${n} per page</option>`).join('')}</select></div>
+<h2>Messaging</h2><div class=bar><select data-c=emode><option value=gmail ${st.emailMode=='gmail'?'selected':''}>Email opens Gmail compose (browser)</option><option value=mailto ${st.emailMode=='mailto'?'selected':''}>Email opens default mail app</option></select><label class=m>WhatsApp country code for 10-digit numbers: +</label><input data-c=cc value="${esc(st.cc)}" style="width:70px"></div>
+<h2>Storage</h2><div class=m>${d.length} datasets · ${n} leads stored · ${est}</div><div class=bar style="margin-top:8px"><button class=p data-a=backup>Download Full Backup</button><button data-a=restore>Restore Backup</button><button class=d data-a=clear>Clear all data</button></div>`}
+function dropInit(){const d=$('#drop');if(!d)return;d.ondragover=e=>{e.preventDefault();d.classList.add('h')};d.ondragleave=()=>d.classList.remove('h');d.ondrop=e=>{e.preventDefault();d.classList.remove('h');importFile(e.dataTransfer.files[0])}}
+/* ---------- modals ---------- */
+function detModal(l){const rows=Object.entries(l.originalRowData).map(([k,v])=>`<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join(''),tl=A.filter(a=>a.leadId==l.leadId).sort((a,b)=>b.timestamp-a.timestamp).map(a=>`<tr><td>${fmt(a.timestamp)}</td><td>${esc(a.activityType)}: ${esc(a.description)}</td></tr>`).join('');
+modal(`<h3>${esc(l.companyName)}</h3><label>Notes</label><textarea id=nt rows=4>${esc(l.notes)}</textarea><div class=bar style="margin-top:6px"><button class=p data-a=savenote data-id=${l.leadId}>Save note</button><button data-a=close>Close</button></div><h2>All columns</h2><table>${rows}</table><h2>Timeline</h2><table>${tl||'<tr><td>No activity</td></tr>'}</table>`)}
+function fuModal(l,f){const t=new Date(Date.now()+864e5),dd=f?f.dueDate:t.toISOString().slice(0,10);
+modal(`<h3>${f?'Edit':'Schedule'} follow-up · ${esc(l.companyName)}</h3><label>Date</label><input type=date id=fd value="${dd}"><label>Time</label><input type=time id=ft value="${f?f.dueTime:'11:00'}"><label>Priority</label><select id=fp>${opt(['Low','Medium','High','Urgent'],f?f.priority:'Medium')}</select><label>Description</label><input id=fx value="${esc(f?f.description:'Call back')}"><label>Notes (optional)</label><textarea id=fn rows=2>${esc(f?f.notes||'':'')}</textarea>
+<div class=bar style="margin-top:10px"><button class=p data-a=savefu data-id=${l.leadId} data-fid="${f?f.followUpId:''}">Save</button><button data-a=close>Cancel</button></div>`)}
+/* ---------- exports ---------- */
+function xl(rows,name){if(!rows.length)return toast('Nothing to export',1);try{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Export');XLSX.writeFile(wb,name+'.xlsx')}catch(e){toast('Export failed: '+e.message,1)}}
+const lrows=a=>a.map(l=>({...l.originalRowData,'Lead Status':l.status,'WhatsApp Status':l.waStatus||'','Call Status':l.callStatus,'Email Status':l.emailStatus,Notes:l.notes}));
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),999)}
+async function backup(){try{const o={app:'SmartLeadManager',version:1,createdAt:new Date().toISOString()};for(const s of STORES)o[s]=await getAll(s);
+dl(new Blob([JSON.stringify(o)],{type:'application/json'}),`SmartLeadManager_Backup_${new Date().toISOString().slice(0,10)}.json`);toast('Backup downloaded')}catch(e){toast('Backup failed: '+e.message,1)}}
+async function restoreFile(file){if(!file)return;try{const o=JSON.parse(await file.text());
+if(o.app!='SmartLeadManager')throw new Error('Not a Smart Lead Manager backup');if(o.version!==1)throw new Error('Unsupported backup version '+o.version);
+for(const s of STORES)if(!Array.isArray(o[s]))throw new Error('Missing section: '+s);
+const ids=new Set(o.datasets.map(d=>d.datasetId));if(o.datasets.some(d=>!d.datasetId||!d.fileName)||o.leads.some(l=>!l.leadId||!ids.has(l.datasetId))||o.activities.some(a=>!ids.has(a.datasetId))||o.followUps.some(f=>!ids.has(f.datasetId)))throw new Error('Broken dataset/lead relationships');
+window._bk=o;const ex=new Set((await getAll('datasets')).map(d=>d.datasetId)),cf=o.datasets.filter(d=>ex.has(d.datasetId)).length;
+modal(`<h3>Restore backup</h3><div class=m>Created ${esc(o.createdAt)}<br>${o.datasets.length} datasets · ${o.leads.length} leads · ${o.activities.length} activities · ${o.followUps.length} follow-ups<br>${cf} dataset(s) conflict with existing IDs.</div>
+<p><b>Replace All</b> erases current data first. <b>Merge</b> keeps current data and imports conflicting datasets as new copies (named “(restored)”).</p><div class=bar><button class=d data-a=rrep>Replace all data</button><button class=p data-a=rmerge>Merge</button><button data-a=close>Cancel</button></div>`)}catch(e){toast('Restore rejected: '+e.message,1)}}
+async function doRestore(merge){const o=window._bk;if(!merge&&!confirm('This will permanently replace ALL current data. Continue?'))return;
+try{const ex=new Set((await getAll('datasets')).map(d=>d.datasetId));let D=o.datasets,Lh=o.leads,Ac=o.activities,Fu=o.followUps;
+if(merge){const map={},lm={};D=D.map(d=>{if(!ex.has(d.datasetId))return d;const n=uid();map[d.datasetId]=n;return{...d,datasetId:n,fileName:d.fileName+' (restored)'}});
+Lh=Lh.map(l=>map[l.datasetId]?(lm[l.leadId]=uid(),{...l,leadId:lm[l.leadId],datasetId:map[l.datasetId]}):l);
+const ls=new Set((await getAll('leads')).map(l=>l.leadId));Lh=Lh.map(l=>ls.has(l.leadId)?{...l,leadId:uid()}:l);
+Ac=Ac.map(a=>map[a.datasetId]?{...a,activityId:uid(),datasetId:map[a.datasetId],leadId:lm[a.leadId]||a.leadId}:a);Fu=Fu.map(f=>map[f.datasetId]?{...f,followUpId:uid(),datasetId:map[f.datasetId],leadId:lm[f.leadId]||f.leadId}:f)}
+await bulk(STORES,x=>{if(!merge)STORES.forEach(s=>x(s).clear());D.forEach(d=>x('datasets').put(d));Lh.forEach(l=>x('leads').put(l));Ac.forEach(a=>x('activities').put(a));Fu.forEach(f=>x('followUps').put(f));if(!merge)o.settings.forEach(s=>x('settings').put(s))});
+closeM();await loadSet();const all=await getAll('datasets');ds=null;if(all[0])await openDs(all[0].datasetId);else await refresh();toast('Backup restored')}catch(e){toast('Restore failed — no changes were made',1)}}
+/* ---------- events ---------- */
+document.addEventListener('input',e=>{if(e.target.id=='q'){q=e.target.value;page=1;renderList()}if(e.target.id=='hq'){hq=e.target.value;rHist();$('#hq').focus()}});
+document.addEventListener('change',async e=>{const t=e.target,c=t.dataset.c,id=t.dataset.id;if(!c)return;
+if(c=='sw')openDs(t.value);else if(c=='quick'){quick=t.value;page=1;renderList()}else if(c=='sort'){sort=t.value;renderList()}
+else if(c=='lst'){const l=byId(id);if(l){const o=l.status;l.status=t.value;if(o!=t.value)await commit(l,null,'Status changed',`${o} → ${t.value}`)}}
+else if(c=='bulkst'&&t.value){const v=t.value;if(!sel.size)return toast('Select leads first',1);for(const i of sel){const l=byId(i);if(l&&l.status!=v){const o=l.status;l.status=v;await commit(l,null,'Status changed',`${o} → ${v} (bulk)`)}}toast('Status updated')}
+else if(c=='emode')setSet('emailMode',t.value);else if(c=='cc')setSet('cc',t.value.replace(/\D/g,'')||'91');else if(c=='theme')setSet('theme',t.value);else if(c=='layout')setSet('layout',t.value);else if(c=='colsn')setSet('cols',+t.value);else if(c=='psz')setSet('pageSize',+t.value)});
+$('#fi').onchange=e=>{importFile(e.target.files[0]);e.target.value=''};$('#bi').onchange=e=>{restoreFile(e.target.files[0]);e.target.value=''};
+$('#ov').onclick=e=>{if(e.target.id=='ov')closeM()};
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-v],[data-a]');if(!t)return;if(t.dataset.v){view=t.dataset.v;return render()}
+const a=t.dataset.a,id=t.dataset.id,l=id?byId(id):null,open=u=>window.open(u,'_blank','noopener');
+switch(a){case'theme':return setSet('theme',st.theme=='dark'?'light':'dark');case'pick':return $('#fi').click();case'close':return closeM();
+case'call':{if(!l)return;const p=phone(l);l.callStatus='Called';if(l.status=='New')l.status='Called';await commit(l,null,'Call initiated','Opened dialer for '+p);location.href='tel:'+p.replace(/[^\d+]/g,'');break}
+case'mail':{const m=email(l),g=st.emailMode=='gmail';if(g)open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(m));else location.href='mailto:'+m;
+l.emailStatus='Email Initiated';await commit(l,null,'Email initiated',(g?'Opened Gmail compose for ':'Opened mail app for ')+m);break}
+case'wa':{const p=phone(l);let d=p.replace(/\D/g,'').replace(/^0+/,'');if(d.length==10)d=st.cc+d;open('https://wa.me/'+d);
+l.waStatus='WhatsApp Opened';await commit(l,null,'WhatsApp initiated','Opened WhatsApp chat with '+p);break}
+case'map':open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(l.companyName+' '+raw(l,'addr')));break;
+case'web':await commit(l,null,'Website opened',web(l));open(web(l));break;case'soc':open(link(l,t.dataset.k));break;
+case'cp':e.preventDefault();navigator.clipboard.writeText(t.dataset.v).then(()=>toast('Copied'),()=>toast('Copy failed',1));break;
+case'sel':t.checked?sel.add(id):sel.delete(id);renderList();break;case'selall':filtered().forEach(x=>sel.add(x.leadId));renderList();break;case'selnone':sel.clear();renderList();break;
+case'prev':page--;renderList();break;case'next':page++;renderList();break;
+case'addf':{const v=$('#fv').value,c=$('#fk').value;if(!v&&c!='empty'&&c!='nempty')return toast('Enter a value',1);flt.push({col:$('#fc').value,c,v});page=1;renderList();break}
+case'rmf':flt.splice(+t.dataset.i,1);renderList();break;case'reset':flt=[];q='';quick='all';page=1;rDash();break;
+case'det':detModal(l);break;
+case'savenote':{const n=$('#nt').value,had=l.notes;l.notes=n;await commit(l,null,'Note added',(had?'Note edited: ':'')+n.slice(0,80));closeM();toast('Note saved');break}
+case'fu':fuModal(l);break;
+case'editf':case'resch':{const f=F.find(x=>x.followUpId==t.dataset.fid);fuModal(byId(f.leadId),f);window._rs=a=='resch';break}
+case'savefu':{const fid=t.dataset.fid,date=$('#fd').value,time=$('#ft').value;if(!date)return toast('Pick a date',1);let f=fid?F.find(x=>x.followUpId==fid):null;
+const nf=!f;if(nf)f={followUpId:uid(),datasetId:ds.datasetId,leadId:id,createdAt:Date.now(),completedAt:null};
+Object.assign(f,{dueDate:date,dueTime:time||'00:00',priority:$('#fp').value,description:$('#fx').value,notes:$('#fn').value,status:'Pending'});
+const lead=byId(id);if(nf)lead.status='Follow-up Required';closeM();await commit(lead,f,nf?'Follow-up created':'Lead updated',(nf?'Scheduled ':window._rs?'Rescheduled ':'Edited ')+'for '+date+' '+time+': '+f.description);overdue();render();toast('Follow-up saved');break}
+case'done':{const f=F.find(x=>x.followUpId==t.dataset.fid);f.status='Completed';f.completedAt=Date.now();await commit(byId(f.leadId),f,'Follow-up completed',f.description);break}
+case'cancelf':{if(!confirm('Cancel this follow-up?'))break;const f=F.find(x=>x.followUpId==t.dataset.fid);f.status='Cancelled';await commit(byId(f.leadId),f,'Lead updated','Follow-up cancelled: '+f.description);break}
+case'opends':view='dash';await openDs(id);break;case'delds':await delDs(id);break;
+case'expf':xl(lrows(filtered()),'Filtered_Leads');break;case'exps':xl(lrows(L.filter(x=>sel.has(x.leadId))),'Selected_Leads');break;
+case'expa':xl(A.map(x=>({Time:fmt(x.timestamp),Company:(byId(x.leadId)||{}).companyName,Type:x.activityType,Description:x.description})),'Activity_History');break;
+case'expfu':xl(F.map(f=>({Company:(byId(f.leadId)||{}).companyName,Due:f.dueDate+' '+f.dueTime,Priority:f.priority,Status:f.status,Description:f.description,Notes:f.notes})),'Follow_ups');break;
+case'backup':backup();break;case'restore':$('#bi').click();break;case'rrep':doRestore(false);break;case'rmerge':doRestore(true);break;
+case'clear':if(confirm('Delete ALL datasets, leads, activities and follow-ups?')&&confirm('This cannot be undone. Really clear everything?')){await bulk(STORES.slice(0,4),o=>STORES.slice(0,4).forEach(s=>o(s).clear()));ds=null;localStorage.removeItem('slm_ds');await refresh();toast('All data cleared')}break}});
+async function loadSet(){(await getAll('settings')).forEach(x=>st[x.key]=x.value);applySt()}
+(async()=>{try{await openDB();await loadSet();const all=await getAll('datasets'),last=localStorage.getItem('slm_ds'),pick=all.find(d=>d.datasetId==last)||all[0];if(pick)await openDs(pick.datasetId);else render()}
+catch(e){$('#main').innerHTML=`<div class=empty>Storage unavailable: ${esc(e.message)}. Open this file in a modern browser outside private mode.</div>`}})();
+</script></body></html>
